@@ -5,7 +5,7 @@ using OpenAI.Assistants;
 using System.ClientModel;
 using System.Text;
 
-namespace OpenAIWebApp.Pages.Cache;
+namespace OpenAIWebApp.Pages.Assistants;
 
 #pragma warning disable OPENAI001 // Assistants type is for evaluation purposes only and is subject to change or removal in future updates. Suppress this diagnostic to proceed.
 public class IndexModel : PageModel
