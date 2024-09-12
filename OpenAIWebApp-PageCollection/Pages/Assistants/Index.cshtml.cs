@@ -77,20 +77,25 @@ public class IndexModel : PageModel
             _ => GetCachedBytes("PageToken")
         };
 
-        PageCollection<Assistant> assistantPages = (cachedPageTokenBytes is null) ?
-
+        PageCollection<Assistant> assistantPages;
+        
+        if (cachedPageTokenBytes is null)
+        {
             // We don't have a token cached for the page of results to render.
             // Request a new collection from user inputs.
-            assistantClient.GetAssistants(new AssistantCollectionOptions()
+            assistantPages = assistantClient.GetAssistants(new AssistantCollectionOptions()
             {
                 Order = listOrder,
                 PageSize = pageSize
-            }) :
-
+            });
+        }
+        else
+        {
             // We have a serialized page token that was cached when a prior
             // web app page was rendered.
             // Rehydrate the page collection from the cached page token.
-            assistantClient.GetAssistants(ContinuationToken.FromBytes(cachedPageTokenBytes));
+            assistantPages = assistantClient.GetAssistants(ContinuationToken.FromBytes(cachedPageTokenBytes));
+        }
 
         // Get the current page from the collection.
         PageResult<Assistant> assitantPage = assistantPages.GetCurrentPage();
