@@ -1,0 +1,89 @@
+﻿@page
+@model OpenAIWebApp.Pages.Cache.IndexModel
+@{
+    ViewData["Title"] = "Assistants - Distributed Cache";
+}
+
+<h1>Assistants - Distributed Cache</h1>
+
+<table class="table">
+    <thead>
+        <tr>
+            <th>
+                @Html.DisplayNameFor(model => model.Assistants[0].Id)
+            </th>
+            <th>
+                @Html.DisplayNameFor(model => model.Assistants[0].CreatedAt)
+            </th>
+            <th>
+                @Html.DisplayNameFor(model => model.Assistants[0].Description)
+            </th>
+            <th>
+                @Html.DisplayNameFor(model => model.Assistants[0].Model)
+            </th>
+            <th></th>
+        </tr>
+    </thead>
+    <tbody>
+        @foreach (var item in Model.Assistants)
+        {
+            <tr>
+                <td>
+                    @Html.DisplayFor(modelItem => item.Id)
+                </td>
+                <td>
+                    @Html.DisplayFor(modelItem => item.CreatedAt)
+                </td>
+                <td>
+                    @Html.DisplayFor(modelItem => item.Name)
+                </td>
+                <td>
+                    @Html.DisplayFor(modelItem => item.Model)
+                </td>
+                <td>
+                    👍🏻
+                </td>
+            </tr>
+        }
+    </tbody>
+</table>
+
+@*
+    First Page Link.
+*@
+@if (Model.IsFirstPage)
+{
+    <label>First Page</label>
+}
+else
+{
+    <a asp-page="./Index" asp-route-pageToRender="first"> First Page </a>
+}
+
+&nbsp;
+
+@*
+    Next Page Link.
+*@
+@if (Model.HasNextPage)
+{
+    <a asp-page="./Index" asp-route-pageToRender="next"> Next Page </a>
+}
+else
+{
+    <label>Next Page</label>
+}
+
+<div />
+
+<a asp-page="./Index" asp-route-size="5"> 5 per page </a>
+&nbsp;
+<a asp-page="./Index" asp-route-size="10"> 10 per page </a>
+&nbsp;
+<a asp-page="./Index" asp-route-size="20"> 20 per page </a>
+
+<div />
+
+<a asp-page="./Index" asp-route-order="asc"> Oldest first </a>
+&nbsp;
+<a asp-page="./Index" asp-route-order="desc"> Newest first </a>
