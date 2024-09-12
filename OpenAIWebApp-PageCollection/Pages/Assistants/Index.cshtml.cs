@@ -30,6 +30,7 @@ public class IndexModel : PageModel
         string apiKey = Environment.GetEnvironmentVariable("OPENAI_API_KEY") ??
             throw new InvalidOperationException("No API key.");
 
+        // Note: we would get this from the DI container in a real implementation.
         OpenAIClient oaClient = new(apiKey);
         AssistantClient assistantClient = oaClient.GetAssistantClient();
 
