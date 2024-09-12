@@ -98,27 +98,27 @@ public class IndexModel : PageModel
         }
 
         // Get the current page from the collection.
-        PageResult<Assistant> assitantPage = assistantPages.GetCurrentPage();
+        PageResult<Assistant> assistantPage = assistantPages.GetCurrentPage();
 
         // Set the values for the web app page to render.
-        Assistants = assitantPage.Values;
+        Assistants = assistantPage.Values;
 
         // Cache the serialized page token value to use the next time
         // the web app page is rendered.
-        CacheBytes("PageToken", assitantPage.PageToken.ToBytes());
+        CacheBytes("PageToken", assistantPage.PageToken.ToBytes());
 
         // Only store the first page token if we don't have one, since if we
         // rehydrated the collection we reset which page is first.
         if (GetCachedBytes("FirstPageToken") is null)
         {
-            CacheBytes("FirstPageToken", assitantPage.PageToken.ToBytes());
+            CacheBytes("FirstPageToken", assistantPage.PageToken.ToBytes());
         }
 
         // Cache the next page token to enable a hyperlink to the next page,
         // or clear it if the current page of results was the last page
-        if (assitantPage.NextPageToken is not null)
+        if (assistantPage.NextPageToken is not null)
         {
-            CacheBytes("NextPageToken", assitantPage.NextPageToken.ToBytes());
+            CacheBytes("NextPageToken", assistantPage.NextPageToken.ToBytes());
 
             HasNextPage = true;
         }
