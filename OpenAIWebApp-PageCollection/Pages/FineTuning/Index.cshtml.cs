@@ -28,21 +28,21 @@ public class IndexModel : PageModel
 
     public void OnGet()
     {
-        string apiKey = Environment.GetEnvironmentVariable("OPENAI_API_KEY") ??
-            throw new InvalidOperationException("No API key.");
+        //string apiKey = Environment.GetEnvironmentVariable("OPENAI_API_KEY") ??
+        //    throw new InvalidOperationException("No API key.");
 
-        // Note: we would get this from the DI container in a real implementation.
-        OpenAIClient oaClient = new(apiKey);
-        FineTuningClient fineTuningClient = oaClient.GetFineTuningClient();
+        //// Note: we would get this from the DI container in a real implementation.
+        //OpenAIClient oaClient = new(apiKey);
+        //FineTuningClient fineTuningClient = oaClient.GetFineTuningClient();
 
-        IEnumerable<ClientResult> jobPages = fineTuningClient.GetJobs(after: null, limit: 10, new RequestOptions());
+        //IEnumerable<ClientResult> jobPages = fineTuningClient.GetJobs(after: null, limit: 10, new RequestOptions());
 
-        ClientResult jobPage = jobPages.First();
+        //ClientResult jobPage = jobPages.First();
 
-        using JsonDocument doc = JsonDocument.Parse(jobPage.GetRawResponse().Content);
-        IEnumerable<JsonElement> jobElements = doc.RootElement.GetProperty("data").EnumerateArray();
+        //using JsonDocument doc = JsonDocument.Parse(jobPage.GetRawResponse().Content);
+        //IEnumerable<JsonElement> jobElements = doc.RootElement.GetProperty("data").EnumerateArray();
 
-        Jobs = jobElements.Select(el => new FineTuningJob(el)).ToList().AsReadOnly();
+        //Jobs = jobElements.Select(el => new FineTuningJob(el)).ToList().AsReadOnly();
     }
 }
 #pragma warning restore OPENAI001 // Assistatns type is for evaluation purposes only and is subject to change or removal in future updates. Suppress this diagnostic to proceed.
