@@ -75,17 +75,20 @@ public class IndexModel : PageModel
 
         // Get the current page of results.
         // TODO: Validate that this only makes a single request.
-        ClientResult pageResult = assistants.GetRawPages().First();
+        //IEnumerable<Assistant> pageItems = assistants.Take(pageSize);
+        PageResult<Assistant> page = assistants.GetPages().First();
 
         // Set the values for the web app page to render.
         // TODO: Set values to render on page from pageResult.
 
         // First, do it the hard way
-        Assistants = GetAssistants(pageResult);
+        //Assistants = GetAssistants(pageResult);
+        Assistants = page.ToList().AsReadOnly();
 
         // Cache the next page token to enable a hyperlink to the next page,
         // or clear it if the current page of results was the last page
-        ContinuationToken? nextPageToken = assistants.GetContinuationToken(pageResult);
+        ContinuationToken? nextPageToken = assistants.GetContinuationToken(page);
+
         if (nextPageToken is null)
         {
             _cache.Remove("NextPageToken");
