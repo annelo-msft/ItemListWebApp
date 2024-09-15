@@ -3,13 +3,17 @@ using Microsoft.Extensions.Caching.Distributed;
 using OpenAI;
 using OpenAI.Assistants;
 using System.ClientModel;
+using System.ClientModel.Primitives;
 using System.Text;
+using System.Text.Json;
 
 namespace OpenAIWebApp.Pages.Assistants;
 
 #pragma warning disable OPENAI001 // Assistants type is for evaluation purposes only and is subject to change or removal in future updates. Suppress this diagnostic to proceed.
 public class IndexModel : PageModel
 {
+    internal int DefaultAssistantCount = 20;
+
     private readonly IDistributedCache _cache;
 
     public bool IsFirstPage { get; set; }
@@ -34,59 +38,31 @@ public class IndexModel : PageModel
         OpenAIClient oaClient = new(apiKey);
         AssistantClient assistantClient = oaClient.GetAssistantClient();
 
-        bool voidCache = false;
+        bool cacheChanged = false;
 
-        int? cachedSize = GetCachedInt("PageSize");
-        if (size is null)
-        {
-            size = cachedSize;
-        }
-        else if (size != cachedSize)
-        {
-            voidCache = true;
-            CacheInt("PageSize", size.Value);
-        }
+        int pageSize = GetPageSize(size, out bool changedCachedValue);
+        cacheChanged = cacheChanged || changedCachedValue;
 
-        // If order changes, void the cache and reset to the
-        // first page -- it's effectively a new collection.
-        string? cachedOrder = GetCachedString("Order");
-        if (order is null)
+        AssistantCollectionOrder? collectionOrder = GetOrder(order, out changedCachedValue);
+        cacheChanged = cacheChanged || changedCachedValue;
+
+        if (cacheChanged)
         {
-            order = cachedOrder;
-        }
-        else if (order != cachedOrder)
-        {
-            voidCache = true;
-            CacheString("Order", order);
+            ClearCachedTokens();
         }
 
-        ListOrder? listOrder = order ?? (ListOrder?)null;
-        int? pageSize = size;
+        BinaryData? pageToken = GetPageToken(pageToRender);
 
-        if (voidCache)
-        {
-            _cache.Remove("FirstPageToken");
-            _cache.Remove("PageToken");
-            _cache.Remove("NextPageToken");
-        }
+        CollectionResult<Assistant> assistants;
 
-        BinaryData? cachedPageTokenBytes = pageToRender switch
-        {
-            "first" => GetCachedBytes("FirstPageToken"),
-            "next" => GetCachedBytes("NextPageToken") ?? throw new InvalidOperationException("No next page available."),
-            _ => GetCachedBytes("PageToken")
-        };
-
-        PageCollection<Assistant> assistantPages;
-        
-        if (cachedPageTokenBytes is null)
+        if (pageToken is null)
         {
             // We don't have a token cached for the page of results to render.
             // Request a new collection from user inputs.
-            assistantPages = assistantClient.GetAssistants(new AssistantCollectionOptions()
+            assistants = assistantClient.GetAssistants(new AssistantCollectionOptions()
             {
-                Order = listOrder,
-                PageSize = pageSize
+                Order = collectionOrder,
+                PageSizeLimit = pageSize
             });
         }
         else
@@ -94,42 +70,118 @@ public class IndexModel : PageModel
             // We have a serialized page token that was cached when a prior
             // web app page was rendered.
             // Rehydrate the page collection from the cached page token.
-            assistantPages = assistantClient.GetAssistants(ContinuationToken.FromBytes(cachedPageTokenBytes));
+            assistants = assistantClient.GetAssistants(ContinuationToken.FromBytes(pageToken));
         }
 
-        // Get the current page from the collection.
-        PageResult<Assistant> assistantPage = assistantPages.GetCurrentPage();
+        // Get the current page of results.
+        // TODO: Validate that this only makes a single request.
+        ClientResult pageResult = assistants.GetRawPages().First();
 
         // Set the values for the web app page to render.
-        Assistants = assistantPage.Values;
+        // TODO: Set values to render on page from pageResult.
 
-        // Cache the serialized page token value to use the next time
-        // the web app page is rendered.
-        CacheBytes("PageToken", assistantPage.PageToken.ToBytes());
-
-        // Only store the first page token if we don't have one, since if we
-        // rehydrated the collection we reset which page is first.
-        if (GetCachedBytes("FirstPageToken") is null)
-        {
-            CacheBytes("FirstPageToken", assistantPage.PageToken.ToBytes());
-        }
+        // First, do it the hard way
+        Assistants = GetAssistants(pageResult);
 
         // Cache the next page token to enable a hyperlink to the next page,
         // or clear it if the current page of results was the last page
-        if (assistantPage.NextPageToken is not null)
-        {
-            CacheBytes("NextPageToken", assistantPage.NextPageToken.ToBytes());
-
-            HasNextPage = true;
-        }
-        else
+        ContinuationToken? nextPageToken = assistants.GetContinuationToken(pageResult);
+        if (nextPageToken is null)
         {
             _cache.Remove("NextPageToken");
 
             HasNextPage = false;
         }
+        else
+        {
+            CacheBytes("NextPageToken", nextPageToken.ToBytes());
+
+            HasNextPage = true;
+        }
     }
 
+    private static IReadOnlyList<Assistant> GetAssistants(ClientResult page)
+    {
+        PipelineResponse response = page.GetRawResponse();
+        using JsonDocument doc = JsonDocument.Parse(response.Content);
+        IEnumerable<JsonElement> els = doc.RootElement.GetProperty("data").EnumerateArray();
+
+        List<Assistant> assistants = [];
+        foreach (JsonElement el in els)
+        {
+            // TODO: improve perf
+            BinaryData json = BinaryData.FromString(el.GetRawText());
+            Assistant assistant = ModelReaderWriter.Read<Assistant>(json)!;
+            assistants.Add(assistant);
+        }
+
+        return assistants.AsReadOnly();
+    }
+
+    private BinaryData? GetPageToken(string? pageToRender)
+    {
+        if (pageToRender == "first")
+        {
+            return null;
+        }
+
+        if (pageToRender == "next")
+        {
+            if (!TryGetCachedBytes("NextPageToken", out BinaryData value))
+            {
+                throw new InvalidOperationException("Continuation token was not found in cache");
+            }
+
+            return value;
+        }
+
+        // No specific page requested -- get the first one
+        return null;
+    }
+
+    private void ClearCachedTokens()
+    {
+        _cache.Remove("NextPageToken");
+    }
+
+    private int GetPageSize(int? size, out bool changedCachedValue)
+    {
+        if (size != null)
+        {
+            CacheInt("PageSize", size.Value);
+            changedCachedValue = true;
+            return size.Value;
+        }
+
+        if (TryGetCachedInt("PageSize", out int value))
+        {
+            changedCachedValue = false;
+            return value;
+        }
+
+        changedCachedValue = false;
+        return DefaultAssistantCount;
+    }
+
+    private AssistantCollectionOrder? GetOrder(string? order, out bool changedCachedValue)
+    {
+        if (order != null)
+        {
+            CacheString("Order", order);
+            changedCachedValue = true;
+            return order;
+        }
+
+        if (TryGetCachedString("Order", out string value))
+        {
+            changedCachedValue = false;
+            return value;
+        }
+
+        changedCachedValue = false;
+        return null;
+    }
+   
     private int CacheInt(string key, int value)
     {
         byte[] encoded = [checked((byte)value)];
@@ -137,10 +189,17 @@ public class IndexModel : PageModel
         return value;
     }
 
-    private int? GetCachedInt(string key)
+    private bool TryGetCachedInt(string key, out int value)
     {
         byte[]? encoded = _cache.Get(key);
-        return encoded?[0];
+        if (encoded == null)
+        {
+            value = default;
+            return false;
+        }
+
+        value = encoded[0];
+        return true;
     }
 
     private string CacheString(string key, string value)
@@ -150,10 +209,17 @@ public class IndexModel : PageModel
         return value;
     }
 
-    private string? GetCachedString(string key)
+    private bool TryGetCachedString(string key, out string value)
     {
         byte[]? encoded = _cache.Get(key);
-        return encoded is null ? null : Encoding.UTF8.GetString(encoded);
+        if (encoded is null)  
+        {
+            value = default!;
+            return false;
+        }
+
+        value = Encoding.UTF8.GetString(encoded);
+        return true;
     }
 
     private byte[] CacheBytes(string key, BinaryData value)
@@ -163,10 +229,17 @@ public class IndexModel : PageModel
         return bytes;
     }
 
-    private BinaryData? GetCachedBytes(string key)
+    private bool TryGetCachedBytes(string key, out BinaryData value)
     {
         byte[]? bytes = _cache.Get(key);
-        return bytes is null ? null : BinaryData.FromBytes(bytes);
+        if (bytes is null)
+        {
+            value = default!;
+            return false;
+        }
+
+        value = BinaryData.FromBytes(bytes);
+        return true;
     }
 }
 #pragma warning restore OPENAI001 // Assistatns type is for evaluation purposes only and is subject to change or removal in future updates. Suppress this diagnostic to proceed.
